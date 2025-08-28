@@ -75,8 +75,7 @@ function App() {
       userId,
       username,
       role,
-      serviceId: "test-service",
-      platformId: "web",
+      platformId: "P101",
     };
 
     socket.emit("joinRoom", userData);
@@ -84,7 +83,7 @@ function App() {
   };
 
   const leaveRoom = () => {
-    socket.emit("leaveRoom", { scheduleId, userId });
+    socket.emit("leaveRoom", {platformId:"P101",username, scheduleId, userId,role });
     setJoined(false);
   };
 
@@ -166,7 +165,9 @@ function App() {
       </div>
 
       <div style={{ display: "flex", gap: "20px" }}>
-        <VideoComponent scheduleId={scheduleId} userId={userId} role={role} />
+        <VideoComponent
+          socket={socket}
+        />
         <ChatComponent
           socket={socket}
           scheduleId={scheduleId}

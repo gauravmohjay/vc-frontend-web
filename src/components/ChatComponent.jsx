@@ -9,7 +9,7 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [handRaised, setHandRaised] = useState(false);
   const messagesEndRef = useRef(null);
-  const handRaiseTimerRef = useRef(null); // Timer reference for auto-lower
+  const handRaiseTimerRef = useRef(null); 
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
