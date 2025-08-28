@@ -89,7 +89,7 @@ function App() {
 
   const endRoom = () => {
     if (role === "host") {
-      socket.emit("endRoom", { scheduleId });
+      socket.emit("endRoom", {platformId:"P101",username, scheduleId, userId,role });
     }
   };
 
