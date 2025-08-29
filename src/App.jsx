@@ -167,6 +167,10 @@ function App() {
       <div style={{ display: "flex", gap: "20px" }}>
         <VideoComponent
           socket={socket}
+          scheduleId={scheduleId}
+          userId={userId}
+          username={username}
+          role={role}
         />
         <ChatComponent
           socket={socket}

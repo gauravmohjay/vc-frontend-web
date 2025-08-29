@@ -4,13 +4,20 @@ import * as LivekitClient from "livekit-client";
 
 const VideoComponent = ({
   socket,
-  platformId = "myPlatform1",
-  scheduleId = "testSchedule1",
+  scheduleId,
+  role,
+  userId,
+  username,
 }) => {
   const [room, setRoom] = useState(null);
   const [isMuted, setIsMuted] = useState(true);
   const [isCamOn, setIsCamOn] = useState(false);
   const [participants, setParticipants] = useState(new Map());
+
+  // Recording states
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState(null);
+
   const videosRef = useRef(null);
 
   useEffect(() => {
@@ -52,15 +59,58 @@ const VideoComponent = ({
       });
     };
 
+    // Recording event handlers
+    const handleRecordingStatus = (status) => {
+      setIsRecording(status.isRecording);
+      if (status.isRecording && status.startTime) {
+        setRecordingStartTime(new Date(status.startTime));
+      } else {
+        setRecordingStartTime(null);
+      }
+    };
+
+    const handleRecordingStarted = (result) => {
+      setIsRecording(true);
+      setRecordingStartTime(new Date());
+      console.log("Recording started:", result);
+    };
+
+    const handleRecordingStopped = (result) => {
+      setIsRecording(false);
+      setRecordingStartTime(null);
+      console.log("Recording stopped:", result);
+      alert(`Recording saved as: ${result.filename}`);
+    };
+
+    const handleRecordingError = (error) => {
+      console.error("Recording error:", error.message);
+      alert(`Recording error: ${error.message}`);
+    };
+
+    // Socket event listeners
     socket.on("livekit-auth", handleLivekitAuth);
+    socket.on("recordingStatus", handleRecordingStatus);
+    socket.on("recordingStarted", handleRecordingStarted);
+    socket.on("recordingStopped", handleRecordingStopped);
+    socket.on("recordingError", handleRecordingError);
+
+    // Get initial recording status
+    if (role === "host") {
+      socket.emit("getRecordingStatus", { scheduleId });
+    }
 
     return () => {
       socket.off("livekit-auth", handleLivekitAuth);
+      socket.off("recordingStatus", handleRecordingStatus);
+      socket.off("recordingStarted", handleRecordingStarted);
+      socket.off("recordingStopped", handleRecordingStopped);
+      socket.off("recordingError", handleRecordingError);
+
       if (room) {
         room.disconnect();
       }
     };
-  }, [socket]);
+  }, [socket, scheduleId, role]);
 
   const addPlaceholder = (identity) => {
     setParticipants((prev) => {
@@ -139,7 +189,7 @@ const VideoComponent = ({
     });
   };
 
-  // === Controls ===
+  // === Existing Controls ===
   const toggleMute = async () => {
     if (!room) return;
     const newMuted = !isMuted;
@@ -180,7 +230,31 @@ const VideoComponent = ({
     }
   };
 
-  // === UI ===
+  // === Recording Controls (Host Only) ===
+  const startRecording = () => {
+    if (role !== "host" || !socket) return;
+
+    socket.emit("startRecording", {
+      scheduleId,
+      userId,
+      username,
+      role: role,
+      layout: "speaker",
+    });
+  };
+
+  const stopRecording = () => {
+    if (role !== "host" || !socket) return;
+
+    socket.emit("stopRecording", {
+      scheduleId,
+      userId,
+      username,
+      role: role,
+    });
+  };
+
+  // === UI Components ===
   const ParticipantTile = ({ participant }) => {
     const tileRef = useRef(null);
 
@@ -209,12 +283,86 @@ const VideoComponent = ({
     );
   };
 
+  // Recording indicator for all users
+  const RecordingIndicator = () => {
+    if (!isRecording) return null;
+
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          background: "#ff4444",
+          color: "white",
+          padding: "8px 16px",
+          borderRadius: "4px",
+          marginBottom: "16px",
+        }}
+      >
+        <div
+          style={{
+            width: "8px",
+            height: "8px",
+            background: "white",
+            borderRadius: "50%",
+            animation: "blink 1s infinite",
+          }}
+        ></div>
+        <span>Recording in progress...</span>
+        {recordingStartTime && (
+          <span style={{ fontSize: "12px", opacity: 0.9 }}>
+            Started: {recordingStartTime.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="video-component">
+      {/* Recording indicator visible to all */}
+      <RecordingIndicator />
+
       <div className="controls">
         <button onClick={toggleMute}>{isMuted ? "Unmute" : "Mute"}</button>
         <button onClick={toggleCamera}>{isCamOn ? "Cam Off" : "Cam On"}</button>
         <button onClick={shareScreen}>Share Screen</button>
+
+        {/* Recording controls - only visible to hosts */}
+        {role === "host" && (
+          <>
+            <button
+              onClick={startRecording}
+              disabled={isRecording}
+              style={{
+                background: isRecording ? "#86efac" : "#22c55e",
+                color: "white",
+                border: "none",
+                padding: "8px 16px",
+                borderRadius: "4px",
+                cursor: isRecording ? "not-allowed" : "pointer",
+              }}
+            >
+              {isRecording ? "Recording..." : "Start Recording"}
+            </button>
+
+            <button
+              onClick={stopRecording}
+              disabled={!isRecording}
+              style={{
+                background: !isRecording ? "#fca5a5" : "#ef4444",
+                color: "white",
+                border: "none",
+                padding: "8px 16px",
+                borderRadius: "4px",
+                cursor: !isRecording ? "not-allowed" : "pointer",
+              }}
+            >
+              Stop Recording
+            </button>
+          </>
+        )}
       </div>
 
       <div id="videos" className="videos" ref={videosRef}>
@@ -222,6 +370,20 @@ const VideoComponent = ({
           <ParticipantTile key={p.identity} participant={p} />
         ))}
       </div>
+
+      {/* Add CSS for blinking animation */}
+      <style jsx>{`
+        @keyframes blink {
+          0%,
+          50% {
+            opacity: 1;
+          }
+          51%,
+          100% {
+            opacity: 0.3;
+          }
+        }
+      `}</style>
     </div>
   );
 };
