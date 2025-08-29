@@ -48,12 +48,13 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
 
     // Chat message received
     socket.on("chatMessage", (msg) => {
-      setMessages((prev) => [...prev, msg]);
+     setMessages((prev) => [...prev, msg])
     });
 
     // Chat history (when joining)
     socket.on("chatHistory", (history) => {
-      setMessages(history);
+     setMessages(history.messages || []);
+       console.log("Chat history:", history);
     });
 
     // Poll events
@@ -222,7 +223,8 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
         }}
       >
         <h4 style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}>Messages</h4>
-        {messages.map((msg, index) => (
+
+        {messages?.map((msg, index) => (
           <div key={index} style={{ 
             marginBottom: "6px", 
             fontSize: "13px",
