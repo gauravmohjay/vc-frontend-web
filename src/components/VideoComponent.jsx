@@ -2,61 +2,54 @@
 import { useEffect, useState, useRef } from "react";
 import * as LivekitClient from "livekit-client";
 
-const VideoComponent = ({ socket }) => {
+const VideoComponent = ({
+  socket,
+  platformId = "myPlatform1",
+  scheduleId = "testSchedule1",
+}) => {
   const [room, setRoom] = useState(null);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [isCamOn, setIsCamOn] = useState(false);
   const [participants, setParticipants] = useState(new Map());
   const videosRef = useRef(null);
 
   useEffect(() => {
-    if (!socket) {
-      console.error("Socket not available");
-      return;
-    }
+    if (!socket) return;
 
     const handleLivekitAuth = async ({ url, token }) => {
-      try {
-        const newRoom = new LivekitClient.Room({
-          autoSubscribe: true,
+      const newRoom = new LivekitClient.Room({ autoSubscribe: true });
+
+      newRoom
+        .on("participantConnected", (p) => {
+          console.log("Participant connected:", p.identity);
+          addPlaceholder(p.identity);
+        })
+        .on("participantDisconnected", (p) => {
+          removeTile(p.identity);
+        })
+        .on("trackSubscribed", (track, pub, participant) => {
+          attachTrack(track, participant.identity);
+        })
+        .on("trackUnsubscribed", (track, pub, participant) => {
+          detachTrack(track, participant.identity);
         });
 
-        newRoom
-          .on("participantConnected", (participant) => {
-            console.log("Participant connected:", participant.identity);
-            addPlaceholder(participant.identity);
-          })
-          .on("participantDisconnected", (participant) => {
-            removeTile(participant.identity);
-          })
-          .on("trackSubscribed", (track, publication, participant) => {
-            attachTrack(track, participant.identity);
-          })
-          .on("trackUnsubscribed", (track, publication, participant) => {
-            detachTrack(track, participant.identity);
-          });
+      await newRoom.connect(url, token);
+      setRoom(newRoom);
 
-        await newRoom.connect(url, token);
-        setRoom(newRoom);
-        console.log("new room",newRoom);
+      // Add self tile
+      addPlaceholder(newRoom.localParticipant.identity);
 
-        // Show self tile
-        addPlaceholder(newRoom.localParticipant.identity);
+      newRoom?.remoteParticipants?.forEach((id, participant) => {
+        console.log("Existing participant:", participant);
+        addPlaceholder(participant);
 
-        // Add already existing participants
-        for (const [id, participant] of newRoom.remoteParticipants) {
-          console.log("Existing participant:", participant.identity);
-          addPlaceholder(participant.identity);
-
-          participant.tracks.forEach((pub) => {
-            if (pub.isSubscribed && pub.track) {
-              attachTrack(pub.track, participant.identity);
-            }
-          });
-        }
-      } catch (error) {
-        console.error("Error connecting to LiveKit:", error);
-      }
+        participant?.tracks?.forEach((pub) => {
+          if (pub.isSubscribed && pub.track) {
+            attachTrack(pub.track, participant.identity);
+          }
+        });
+      });
     };
 
     socket.on("livekit-auth", handleLivekitAuth);
@@ -67,149 +60,140 @@ const VideoComponent = ({ socket }) => {
         room.disconnect();
       }
     };
-  }, []);
+  }, [socket]);
 
   const addPlaceholder = (identity) => {
     setParticipants((prev) => {
       if (!prev.has(identity)) {
-        const newParticipants = new Map(prev);
-        newParticipants.set(identity, {
+        const newMap = new Map(prev);
+        newMap.set(identity, {
           identity,
           hasVideo: false,
           videoElement: null,
           audioElement: null,
         });
-        return newParticipants;
+        return newMap;
       }
       return prev;
     });
   };
 
   const attachTrack = async (track, identity) => {
-    console.log("Attaching track:", track.kind, "for", identity);
-
-    const element = track.attach();
-    element.id = `media-${identity}-${track.kind}`;
-    element.autoplay = true;
-    element.playsInline = true;
+    const el = track.attach();
+    el.id = `media-${identity}-${track.kind}`;
+    el.autoplay = true;
+    el.playsInline = true;
 
     if (track.kind === "video") {
       setParticipants((prev) => {
-        const newParticipants = new Map(prev);
-        const participant = newParticipants.get(identity) || { identity };
-        participant.hasVideo = true;
-        participant.videoElement = element;
-        newParticipants.set(identity, participant);
-        return newParticipants;
+        const newMap = new Map(prev);
+        const p = newMap.get(identity) || { identity };
+        p.hasVideo = true;
+        p.videoElement = el;
+        newMap.set(identity, p);
+        return newMap;
       });
     } else if (track.kind === "audio") {
-      element.muted = identity === room?.localParticipant?.identity;
+      el.muted = identity === room?.localParticipant?.identity;
       try {
-        await element.play();
+        await el.play();
       } catch (err) {
-        console.warn("Autoplay blocked, waiting for gesture", err);
+        console.warn("Autoplay blocked:", err);
       }
-
+      document.body.appendChild(el);
       setParticipants((prev) => {
-        const newParticipants = new Map(prev);
-        const participant = newParticipants.get(identity) || { identity };
-        participant.audioElement = element;
-        newParticipants.set(identity, participant);
-        return newParticipants;
+        const newMap = new Map(prev);
+        const p = newMap.get(identity) || { identity };
+        p.audioElement = el;
+        newMap.set(identity, p);
+        return newMap;
       });
-
-      // Append audio to body
-      document.body.appendChild(element);
     }
   };
 
   const detachTrack = (track, identity) => {
-    const element = document.getElementById(`media-${identity}-${track.kind}`);
-    if (element) {
-      track.detach(element);
-      element.remove();
+    const el = document.getElementById(`media-${identity}-${track.kind}`);
+    if (el) {
+      track.detach(el);
+      el.remove();
     }
-
     if (track.kind === "video") {
       setParticipants((prev) => {
-        const newParticipants = new Map(prev);
-        const participant = newParticipants.get(identity);
-        if (participant) {
-          participant.hasVideo = false;
-          participant.videoElement = null;
-          newParticipants.set(identity, participant);
+        const newMap = new Map(prev);
+        const p = newMap.get(identity);
+        if (p) {
+          p.hasVideo = false;
+          p.videoElement = null;
+          newMap.set(identity, p);
         }
-        return newParticipants;
+        return newMap;
       });
     }
   };
 
   const removeTile = (identity) => {
     setParticipants((prev) => {
-      const newParticipants = new Map(prev);
-      newParticipants.delete(identity);
-      return newParticipants;
+      const newMap = new Map(prev);
+      newMap.delete(identity);
+      return newMap;
     });
   };
 
+  // === Controls ===
   const toggleMute = async () => {
     if (!room) return;
-
-    const newMutedState = !isMuted;
-    setIsMuted(newMutedState);
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
 
     if (!room.localParticipant.microphoneTrack) {
       const [micTrack] = await LivekitClient.createLocalTracks({ audio: true });
       await room.localParticipant.publishTrack(micTrack);
     }
-    room.localParticipant.setMicrophoneEnabled(!newMutedState);
+    room.localParticipant.setMicrophoneEnabled(!newMuted);
   };
 
   const toggleCamera = async () => {
     if (!room) return;
+    const newState = !isCamOn;
+    setIsCamOn(newState);
 
-    const newCamState = !isCamOn;
-    setIsCamOn(newCamState);
-
-    if (!room.localParticipant.cameraTrack && newCamState) {
+    if (!room.localParticipant.cameraTrack && newState) {
       const [camTrack] = await LivekitClient.createLocalTracks({ video: true });
       await room.localParticipant.publishTrack(camTrack);
       attachTrack(camTrack, room.localParticipant.identity);
     } else {
-      room.localParticipant.setCameraEnabled(newCamState);
+      room.localParticipant.setCameraEnabled(newState);
     }
   };
 
   const shareScreen = async () => {
     if (!room) return;
-
     try {
       await room.localParticipant.setScreenShareEnabled(true);
       const tracks = await LivekitClient.createLocalTracks({ screen: true });
-      for (const track of tracks) {
-        await room.localParticipant.publishTrack(track);
-        attachTrack(track, `${room.localParticipant.identity}-screen`);
+      for (const t of tracks) {
+        await room.localParticipant.publishTrack(t);
+        attachTrack(t, `${room.localParticipant.identity}-screen`);
       }
-    } catch (error) {
-      console.error("Error sharing screen:", error);
+    } catch (err) {
+      console.error("Error sharing screen:", err);
     }
   };
 
+  // === UI ===
   const ParticipantTile = ({ participant }) => {
     const tileRef = useRef(null);
 
     useEffect(() => {
-      if (participant.videoElement && tileRef.current) {
-        // Clear the tile first
+      if (tileRef.current) {
         tileRef.current.innerHTML = "";
         if (participant.hasVideo && participant.videoElement) {
           tileRef.current.appendChild(participant.videoElement);
         } else {
-          // Show placeholder
-          const placeholder = document.createElement("div");
-          placeholder.className = "placeholder";
-          placeholder.innerText = participant.identity.toUpperCase();
-          tileRef.current.appendChild(placeholder);
+          const ph = document.createElement("div");
+          ph.className = "placeholder";
+          ph.innerText = participant.identity.toUpperCase();
+          tileRef.current.appendChild(ph);
         }
       }
     }, [participant]);
@@ -234,11 +218,8 @@ const VideoComponent = ({ socket }) => {
       </div>
 
       <div id="videos" className="videos" ref={videosRef}>
-        {Array.from(participants.values()).map((participant) => (
-          <ParticipantTile
-            key={participant.identity}
-            participant={participant}
-          />
+        {Array.from(participants.values()).map((p) => (
+          <ParticipantTile key={p.identity} participant={p} />
         ))}
       </div>
     </div>

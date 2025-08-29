@@ -58,7 +58,7 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
     });
 
     // Poll events
-    socket.on("roomEvent", (event) => {
+    socket.on("voteEvent", (event) => {
       if (event.type === "pollCreated") {
         setPolls((prev) => [...prev, event]);
       } else if (event.type === "pollUpdate") {
@@ -74,7 +74,7 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
     });
 
     // Hand raise events
-    socket.on("handRaiseEvent", (event) => {
+    socket.on("handEvent", (event) => {
       if (event.type === "handRaised") {
         setRaisedHands((prev) => [
           ...prev.filter((h) => h.userId !== event.userId),
@@ -132,9 +132,9 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
       
       socket.off("chatMessage");
       socket.off("chatHistory");
-      socket.off("roomEvent");
+      socket.off("voteEvent");
       socket.off("pollHistory");
-      socket.off("handRaiseEvent");
+      socket.off("handEvent");
       socket.off("handRaiseList");
       socket.off("error");
       socket.off("messageAck");
