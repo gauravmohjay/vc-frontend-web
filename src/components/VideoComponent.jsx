@@ -2,13 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import * as LivekitClient from "livekit-client";
 
-const VideoComponent = ({
-  socket,
-  scheduleId,
-  role,
-  userId,
-  username,
-}) => {
+const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
   const [room, setRoom] = useState(null);
   const [isMuted, setIsMuted] = useState(true);
   const [isCamOn, setIsCamOn] = useState(false);
@@ -20,7 +14,7 @@ const VideoComponent = ({
   const [isHostCameraRecording, setIsHostCameraRecording] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState(null);
   const [recordingType, setRecordingType] = useState(null); // 'room', 'screen', 'host-camera'
-  
+
   // Screen sharing state
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
@@ -48,15 +42,19 @@ const VideoComponent = ({
         })
         // Track screen share status
         .on("trackPublished", (pub, participant) => {
-          if (participant.identity === newRoom.localParticipant.identity && 
-              pub.source === 'screen_share') {
+          if (
+            participant.identity === newRoom.localParticipant.identity &&
+            pub.source === "screen_share"
+          ) {
             setIsScreenSharing(true);
             console.log("Screen share track published");
           }
         })
         .on("trackUnpublished", (pub, participant) => {
-          if (participant.identity === newRoom.localParticipant.identity && 
-              pub.source === 'screen_share') {
+          if (
+            participant.identity === newRoom.localParticipant.identity &&
+            pub.source === "screen_share"
+          ) {
             setIsScreenSharing(false);
             console.log("Screen share track unpublished");
           }
@@ -67,8 +65,8 @@ const VideoComponent = ({
 
       // Add self tile
       addPlaceholder(newRoom.localParticipant.identity);
-      console.log("setRoom->",room)
-      console.log("setRoom->newRoom",newRoom)
+      console.log("setRoom->", room);
+      console.log("setRoom->newRoom", newRoom);
 
       newRoom?.remoteParticipants?.forEach((id, participant) => {
         console.log("Existing participant:", participant);
@@ -85,30 +83,30 @@ const VideoComponent = ({
     // Enhanced Recording Status Handler
     const handleRecordingStatus = (status) => {
       console.log("📊 Recording status update:", status);
-      
+
       // Reset all recording states first
       setIsRecording(false);
       setIsScreenRecording(false);
       setIsHostCameraRecording(false);
-      
+
       if (status.isRecording) {
         setRecordingType(status.recordingType);
-        
+
         // Set appropriate recording state based on type
         switch (status.recordingType) {
-          case 'room':
+          case "room":
             setIsRecording(true);
             break;
-          case 'screen':
+          case "screen":
             setIsScreenRecording(true);
             break;
-          case 'host-camera':
+          case "host-camera":
             setIsHostCameraRecording(true);
             break;
           default:
             setIsRecording(true); // fallback
         }
-        
+
         if (status.startTime) {
           setRecordingStartTime(new Date(status.startTime));
         }
@@ -121,7 +119,7 @@ const VideoComponent = ({
     // Room Recording Event Handlers
     const handleRoomRecordingStarted = (result) => {
       setIsRecording(true);
-      setRecordingType('room');
+      setRecordingType("room");
       setRecordingStartTime(new Date());
       console.log("🎥 Room recording started:", result);
       alert(`Room recording started: ${result.filename}`);
@@ -138,7 +136,7 @@ const VideoComponent = ({
     // Screen Recording Event Handlers
     const handleScreenRecordingStarted = (result) => {
       setIsScreenRecording(true);
-      setRecordingType('screen');
+      setRecordingType("screen");
       setRecordingStartTime(new Date());
       console.log("🖥️ Screen recording started:", result);
       alert(`Screen recording started: ${result.filename}`);
@@ -155,7 +153,7 @@ const VideoComponent = ({
     // Host Camera Recording Event Handlers
     const handleHostCameraRecordingStarted = (result) => {
       setIsHostCameraRecording(true);
-      setRecordingType('host-camera');
+      setRecordingType("host-camera");
       setRecordingStartTime(new Date());
       console.log("📹 Host camera recording started:", result);
       alert(`Host camera recording started: ${result.filename}`);
@@ -185,7 +183,7 @@ const VideoComponent = ({
     const handleRecordingError = (error) => {
       console.error("❌ Recording error:", error);
       alert(`Recording error: ${error.message}`);
-      
+
       // Reset states on error
       setIsRecording(false);
       setIsScreenRecording(false);
@@ -197,19 +195,19 @@ const VideoComponent = ({
     // Socket event listeners - Updated for new events
     socket.on("livekit-auth", handleLivekitAuth);
     socket.on("recordingStatus", handleRecordingStatus);
-    
+
     // Room recording events
     socket.on("roomRecordingStarted", handleRoomRecordingStarted);
     socket.on("roomRecordingStopped", handleRoomRecordingStopped);
-    
+
     // Screen recording events
     socket.on("screenRecordingStarted", handleScreenRecordingStarted);
     socket.on("screenRecordingStopped", handleScreenRecordingStopped);
-    
+
     // Host camera recording events
     socket.on("hostCameraRecordingStarted", handleHostCameraRecordingStarted);
     socket.on("hostCameraRecordingStopped", handleHostCameraRecordingStopped);
-    
+
     // Generic events (backward compatibility)
     socket.on("recordingStarted", handleRoomRecordingStarted); // fallback
     socket.on("recordingStopped", handleRecordingStopped);
@@ -228,8 +226,14 @@ const VideoComponent = ({
       socket.off("roomRecordingStopped", handleRoomRecordingStopped);
       socket.off("screenRecordingStarted", handleScreenRecordingStarted);
       socket.off("screenRecordingStopped", handleScreenRecordingStopped);
-      socket.off("hostCameraRecordingStarted", handleHostCameraRecordingStarted);
-      socket.off("hostCameraRecordingStopped", handleHostCameraRecordingStopped);
+      socket.off(
+        "hostCameraRecordingStarted",
+        handleHostCameraRecordingStarted
+      );
+      socket.off(
+        "hostCameraRecordingStopped",
+        handleHostCameraRecordingStopped
+      );
       socket.off("recordingStarted", handleRoomRecordingStarted);
       socket.off("recordingStopped", handleRecordingStopped);
       socket.off("recordingError", handleRecordingError);
@@ -347,17 +351,17 @@ const VideoComponent = ({
 
   const shareScreen = async () => {
     if (!room) return;
-    
+
     try {
       if (!isScreenSharing) {
         await room.localParticipant.setScreenShareEnabled(true);
         setIsScreenSharing(true);
-        console.log('✅ Screen sharing started');
+        console.log("✅ Screen sharing started");
       } else {
         await room.localParticipant.setScreenShareEnabled(false);
         setIsScreenSharing(false);
-        console.log('🛑 Screen sharing stopped');
-        
+        console.log("🛑 Screen sharing stopped");
+
         // Auto-stop screen recording if active
         if (isScreenRecording) {
           stopScreenRecording();
@@ -365,13 +369,15 @@ const VideoComponent = ({
       }
     } catch (err) {
       console.error("❌ Screen sharing error:", err);
-      alert("Failed to start screen sharing. Please check browser permissions.");
+      alert(
+        "Failed to start screen sharing. Please check browser permissions."
+      );
       setIsScreenSharing(false);
     }
   };
 
   // === Updated Recording Controls ===
-  
+
   // Room Recording Controls
   const startRoomRecording = () => {
     if (role !== "host" || !socket) return;
@@ -381,8 +387,10 @@ const VideoComponent = ({
       userId,
       username,
       role,
-      layout: "speaker",
-      preset: "HD_1080P_30"
+      layout: "grid", // Grid layout shows placeholders well
+      preset: "H264_1080P_30",
+      audioOnly: false, // Include video (with placeholders)
+      videoOnly: false,
     });
   };
 
@@ -400,7 +408,7 @@ const VideoComponent = ({
   // Screen Recording Controls
   const startScreenRecording = () => {
     if (role !== "host" || !socket) return;
-    
+
     if (!isScreenSharing) {
       alert("Please start screen sharing first before recording your screen.");
       return;
@@ -411,7 +419,7 @@ const VideoComponent = ({
       userId,
       username,
       role,
-      preset: "HD_1080P_30"
+      preset: "HD_1080P_30",
     });
   };
 
@@ -436,7 +444,7 @@ const VideoComponent = ({
       username,
       role,
       preset: "HD_1080P_30",
-      includeAudio: true
+      includeAudio: true,
     });
   };
 
@@ -494,20 +502,21 @@ const VideoComponent = ({
 
   // Enhanced Recording Indicator
   const RecordingIndicator = () => {
-    if (!isRecording && !isScreenRecording && !isHostCameraRecording) return null;
+    if (!isRecording && !isScreenRecording && !isHostCameraRecording)
+      return null;
 
-    let recordingText = 'Recording';
-    let bgColor = '#ff4444';
+    let recordingText = "Recording";
+    let bgColor = "#ff4444";
 
     if (isScreenRecording) {
-      recordingText = 'Screen Recording';
-      bgColor = '#9333ea';
+      recordingText = "Screen Recording";
+      bgColor = "#9333ea";
     } else if (isHostCameraRecording) {
-      recordingText = 'Host Camera Recording';
-      bgColor = '#059669';
+      recordingText = "Host Camera Recording";
+      bgColor = "#059669";
     } else if (isRecording) {
-      recordingText = 'Room Recording';
-      bgColor = '#ff4444';
+      recordingText = "Room Recording";
+      bgColor = "#ff4444";
     }
 
     return (
@@ -542,7 +551,8 @@ const VideoComponent = ({
     );
   };
 
-  const isAnyRecording = isRecording || isScreenRecording || isHostCameraRecording;
+  const isAnyRecording =
+    isRecording || isScreenRecording || isHostCameraRecording;
 
   return (
     <div className="video-component">
@@ -585,26 +595,13 @@ const VideoComponent = ({
                 border: "none",
                 padding: "8px 16px",
                 borderRadius: "4px",
-                cursor: (isAnyRecording || !isScreenSharing) ? "not-allowed" : "pointer",
+                cursor:
+                  isAnyRecording || !isScreenSharing
+                    ? "not-allowed"
+                    : "pointer",
               }}
             >
               {isScreenRecording ? "Recording Screen..." : "Record Screen"}
-            </button>
-
-            {/* Host Camera Recording Controls */}
-            <button
-              onClick={startHostCameraRecording}
-              disabled={isAnyRecording}
-              style={{
-                background: isHostCameraRecording ? "#6ee7b7" : "#059669",
-                color: "white",
-                border: "none",
-                padding: "8px 16px",
-                borderRadius: "4px",
-                cursor: isAnyRecording ? "not-allowed" : "pointer",
-              }}
-            >
-              {isHostCameraRecording ? "Recording Camera..." : "Record Camera"}
             </button>
 
             {/* Universal Stop Recording */}
