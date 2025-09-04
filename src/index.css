@@ -135,3 +135,134 @@ button:focus-visible {
   color: white;
 }
 
+.custom-layout-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+.leave-button-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.leave-button {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.leave-button:hover {
+  background: #c82333;
+}
+
+.join-form-container {
+  max-width: 500px;
+  margin: 50px auto;
+  padding: 30px;
+  background: #f8f9fa;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.join-form-container h1 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 30px;
+}
+
+.join-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #555;
+}
+
+.form-group input {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.join-button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 15px;
+  border-radius: 5px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.join-button:hover {
+  background: #0056b3;
+}
+
+.info-section {
+  margin-top: 30px;
+  padding: 20px;
+  background: #e9ecef;
+  border-radius: 5px;
+}
+
+.info-section h3 {
+  margin-bottom: 10px;
+  color: #495057;
+}
+
+.info-section ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #6c757d;
+}
+
+.info-section li {
+  margin-bottom: 5px;
+}
+
+/* LiveKit component overrides */
+.recording-container .lk-grid-layout {
+  background: #1a1a1a;
+}
+
+.recording-container .lk-participant-tile {
+  border: 2px solid #333;
+  border-radius: 8px;
+}
+
+.recording-container .lk-participant-placeholder {
+  background: #2a2a2a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: bold;
+}

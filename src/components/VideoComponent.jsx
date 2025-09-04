@@ -7,6 +7,7 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [isCamOn, setIsCamOn] = useState(false);
   const [participants, setParticipants] = useState(new Map());
+  const [isRoomRecording, setIsRoomRecording] = useState(false);
 
   // Simple screen recording states
   const [isScreenRecording, setIsScreenRecording] = useState(false);
@@ -89,17 +90,32 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
       alert(`Recording error: ${error.message}`);
       setIsScreenRecording(false);
     };
+    const handleRoomRecordingStarted = (result) => {
+      setIsRoomRecording(true);
+      console.log("🏠 Room recording started:", result);
+      alert(`Room recording started: ${result.filename}`);
+    };
+
+    const handleRoomRecordingStopped = (result) => {
+      setIsRoomRecording(false);
+      console.log("🏠 Room recording stopped:", result);
+      alert(`Room recording saved as: ${result.filename}`);
+    };
 
     // Socket event listeners
     socket.on("livekit-auth", handleLivekitAuth);
     socket.on("screenRecordingStarted", handleScreenRecordingStarted);
     socket.on("screenRecordingStopped", handleScreenRecordingStopped);
     socket.on("recordingError", handleRecordingError);
+    socket.on("roomRecordingStarted", handleRoomRecordingStarted);
+    socket.on("roomRecordingStopped", handleRoomRecordingStopped);
 
     return () => {
       socket.off("livekit-auth", handleLivekitAuth);
       socket.off("screenRecordingStarted", handleScreenRecordingStarted);
       socket.off("screenRecordingStopped", handleScreenRecordingStopped);
+      socket.off("roomRecordingStarted", handleRoomRecordingStarted);
+      socket.off("roomRecordingStopped", handleRoomRecordingStopped);
       socket.off("recordingError", handleRecordingError);
 
       if (room) {
@@ -232,7 +248,9 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
       }
     } catch (err) {
       console.error("❌ Screen sharing error:", err);
-      alert("Failed to start screen sharing. Please check browser permissions.");
+      alert(
+        "Failed to start screen sharing. Please check browser permissions."
+      );
       setIsScreenSharing(false);
     }
   };
@@ -264,8 +282,29 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
       role,
     });
   };
+  // Room Recording Controls
+  const startRoomRecording = () => {
+    if (role !== "host" || !socket) return;
 
-  // Participant Tile Component
+    socket.emit("startRoomRecording", {
+      scheduleId,
+      userId,
+      username,
+      role,
+    });
+  };
+
+  const stopRoomRecording = () => {
+    if (role !== "host" || !socket) return;
+
+    socket.emit("stopRoomRecording", {
+      scheduleId,
+      userId,
+      username,
+      role,
+    });
+  };
+
   const ParticipantTile = ({ participant }) => {
     const tileRef = useRef(null);
 
@@ -296,14 +335,13 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
 
   return (
     <div className="video-component">
-      {/* Simple recording indicator */}
-      {isScreenRecording && (
+      {(isScreenRecording || isRoomRecording) && (
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            background: "#9333ea",
+            background: isRoomRecording ? "#059669" : "#9333ea",
             color: "white",
             padding: "8px 16px",
             borderRadius: "4px",
@@ -319,7 +357,10 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
               animation: "blink 1s infinite",
             }}
           ></div>
-          <span>Screen Recording in progress...</span>
+          <span>
+            {isRoomRecording ? "Room Recording" : "Screen Recording"} in
+            progress...
+          </span>
         </div>
       )}
 
@@ -333,7 +374,9 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
         {/* Simple Screen Recording Control - only for hosts */}
         {role === "host" && (
           <button
-            onClick={isScreenRecording ? stopScreenRecording : startScreenRecording}
+            onClick={
+              isScreenRecording ? stopScreenRecording : startScreenRecording
+            }
             disabled={!isScreenSharing}
             style={{
               background: isScreenRecording ? "#ef4444" : "#9333ea",
@@ -347,6 +390,22 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
             {isScreenRecording ? "Stop Recording" : "Record Screen"}
           </button>
         )}
+        {role === "host" && (
+          <button
+            onClick={isRoomRecording ? stopRoomRecording : startRoomRecording}
+            style={{
+              background: isRoomRecording ? "#ef4444" : "#059669",
+              color: "white",
+              border: "none",
+              padding: "8px 16px",
+              borderRadius: "4px",
+              cursor: "pointer",
+              marginLeft: "8px",
+            }}
+          >
+            {isRoomRecording ? "Stop Room Recording" : "Record Room"}
+          </button>
+        )}
       </div>
 
       <div id="videos" className="videos" ref={videosRef}>
@@ -358,8 +417,14 @@ const VideoComponent = ({ socket, scheduleId, role, userId, username }) => {
       {/* CSS for blinking animation */}
       <style jsx>{`
         @keyframes blink {
-          0%, 50% { opacity: 1; }
-          51%, 100% { opacity: 0.3; }
+          0%,
+          50% {
+            opacity: 1;
+          }
+          51%,
+          100% {
+            opacity: 0.3;
+          }
         }
       `}</style>
     </div>
