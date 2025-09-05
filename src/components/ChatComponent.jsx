@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react';
 
-const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
+const ChatComponent = ({ socket, scheduleId, occurrenceId, userId, username, role }) => {
   const [messages, setMessages] = useState([]);
   const [polls, setPolls] = useState([]);
   const [raisedHands, setRaisedHands] = useState([]);
@@ -9,7 +9,7 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [handRaised, setHandRaised] = useState(false);
   const messagesEndRef = useRef(null);
-  const handRaiseTimerRef = useRef(null); 
+  const handRaiseTimerRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -19,21 +19,28 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
     scrollToBottom();
   }, [messages]);
 
+  // Reset local state when switching rooms/occurrences
+  useEffect(() => {
+    setMessages([]);
+    setPolls([]);
+    setRaisedHands([]);
+    setHandRaised(false);
+    if (handRaiseTimerRef.current) {
+      clearTimeout(handRaiseTimerRef.current);
+      handRaiseTimerRef.current = null;
+    }
+  }, [scheduleId, occurrenceId]);
+
   // Auto-lower hand after 30 seconds
   const startHandRaiseTimer = () => {
-    // Clear existing timer if any
-    console.log("Starting hand raise timer");
     if (handRaiseTimerRef.current) {
       clearTimeout(handRaiseTimerRef.current);
     }
-
-    // Set timer for 30 seconds
     handRaiseTimerRef.current = setTimeout(() => {
       if (handRaised) {
-        console.log("Auto-lowering hand after 30 seconds");
-        socket.emit("lowerHand", { scheduleId });
+        socket.emit("lowerHand", { scheduleId, occurrenceId });
       }
-    }, 30000); // 30 seconds
+    }, 30000);
   };
 
   const clearHandRaiseTimer = () => {
@@ -43,139 +50,152 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
     }
   };
 
+  // Utility: ensure poll belongs to current room scope
+  const isThisRoomPoll = (p) =>
+    p &&
+    p.scheduleId === scheduleId &&
+    (p.occurrenceId == null || p.occurrenceId === occurrenceId);
+
+  // Utility: upsert a poll by id
+  const upsertPoll = (incoming) => {
+    setPolls((prev) => {
+      const exists = prev.find((p) => p.id === incoming.id);
+      if (!exists) return [...prev, incoming];
+      return prev.map((p) => (p.id === incoming.id ? incoming : p));
+    });
+  };
+
   useEffect(() => {
     if (!socket) return;
 
     // Chat message received
-    socket.on("chatMessage", (msg) => {
-     setMessages((prev) => [...prev, msg])
-    });
+    const onChatMessage = (msg) => setMessages((prev) => [...prev, msg]);
 
     // Chat history (when joining)
-    socket.on("chatHistory", (history) => {
-     setMessages(history.messages || []);
-       console.log("Chat history:", history);
-    });
+    const onChatHistory = (history) => {
+      setMessages(history.messages || []);
+      console.log("Chat history:", history);
+    };
 
     // Poll events
-    socket.on("voteEvent", (event) => {
+    const onVoteEvent = (event) => {
+      if (!isThisRoomPoll(event)) return;
       if (event.type === "pollCreated") {
-        setPolls((prev) => [...prev, event]);
+        upsertPoll(event);
       } else if (event.type === "pollUpdate") {
-        setPolls((prev) =>
-          prev.map((poll) => (poll.id === event.id ? event : poll))
-        );
+        upsertPoll(event);
       }
-    });
+    };
 
-    // Poll history
-    socket.on("pollHistory", (history) => {
-      setPolls(history);
-    });
+    // Poll history (filter to this room/occurrence and dedupe)
+    const onPollHistory = (history) => {
+      const filtered = Array.isArray(history)
+        ? history.filter(isThisRoomPoll)
+        : [];
+      const byId = new Map();
+      for (const p of filtered) byId.set(p.id, p);
+      // Optional: keep recent first
+      const deduped = Array.from(byId.values()).sort(
+        (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+      );
+      setPolls(deduped);
+    };
 
     // Hand raise events
-    socket.on("handEvent", (event) => {
+    const onHandEvent = (event) => {
       if (event.type === "handRaised") {
-        setRaisedHands((prev) => [
-          ...prev.filter((h) => h.userId !== event.userId),
-          event,
-        ]);
+        setRaisedHands((prev) => [...prev.filter((h) => h.userId !== event.userId), event]);
       } else if (event.type === "handLowered") {
         setRaisedHands((prev) => prev.filter((h) => h.userId !== event.userId));
         if (event.userId === userId) {
           setHandRaised(false);
-          clearHandRaiseTimer(); // Clear timer when hand is lowered
+          clearHandRaiseTimer();
         }
       }
-    });
+    };
 
     // Hand raise list
-    socket.on("handRaiseList", (list) => {
-      setRaisedHands(list);
-    });
+    const onHandRaiseList = (list) => setRaisedHands(list);
 
-    // Error handling
-    socket.on("error", (error) => {
-      alert(`Error: ${error.message}`);
-    });
-
-    // Acknowledgments
-    socket.on("messageAck", (ack) => {
-      console.log("Message delivered:", ack);
-    });
-
-    socket.on("createPollAck", (ack) => {
+    const onError = (error) => alert(`Error: ${error.message}`);
+    const onMessageAck = (ack) => console.log("Message delivered:", ack);
+    const onCreatePollAck = (ack) => {
       console.log("Poll created:", ack);
       setPollQuestion("");
       setPollOptions(["", ""]);
-    });
-
-    socket.on("voteAck", (ack) => {
-      console.log("Vote recorded:", ack);
-    });
-
-    socket.on("handRaiseAck", (ack) => {
+    };
+    const onVoteAck = (ack) => console.log("Vote recorded:", ack);
+    const onHandRaiseAck = (ack) => {
       console.log("Hand raised:", ack);
       setHandRaised(true);
-      startHandRaiseTimer(); // Start 30-second timer
-    });
-
-    socket.on("handLowerAck", (ack) => {
+      startHandRaiseTimer();
+    };
+    const onHandLowerAck = (ack) => {
       console.log("Hand lowered:", ack);
       setHandRaised(false);
-      clearHandRaiseTimer(); // Clear timer
-    });
+      clearHandRaiseTimer();
+    };
+
+    socket.on("chatMessage", onChatMessage);
+    socket.on("chatHistory", onChatHistory);
+    socket.on("voteEvent", onVoteEvent);
+    socket.on("pollHistory", onPollHistory);
+    socket.on("handEvent", onHandEvent);
+    socket.on("handRaiseList", onHandRaiseList);
+    socket.on("error", onError);
+    socket.on("messageAck", onMessageAck);
+    socket.on("createPollAck", onCreatePollAck);
+    socket.on("voteAck", onVoteAck);
+    socket.on("handRaiseAck", onHandRaiseAck);
+    socket.on("handLowerAck", onHandLowerAck);
 
     return () => {
-      // Clear timer on component unmount
       clearHandRaiseTimer();
-      
-      socket.off("chatMessage");
-      socket.off("chatHistory");
-      socket.off("voteEvent");
-      socket.off("pollHistory");
-      socket.off("handEvent");
-      socket.off("handRaiseList");
-      socket.off("error");
-      socket.off("messageAck");
-      socket.off("createPollAck");
-      socket.off("voteAck");
-      socket.off("handRaiseAck");
-      socket.off("handLowerAck");
+      socket.off("chatMessage", onChatMessage);
+      socket.off("chatHistory", onChatHistory);
+      socket.off("voteEvent", onVoteEvent);
+      socket.off("pollHistory", onPollHistory);
+      socket.off("handEvent", onHandEvent);
+      socket.off("handRaiseList", onHandRaiseList);
+      socket.off("error", onError);
+      socket.off("messageAck", onMessageAck);
+      socket.off("createPollAck", onCreatePollAck);
+      socket.off("voteAck", onVoteAck);
+      socket.off("handRaiseAck", onHandRaiseAck);
+      socket.off("handLowerAck", onHandLowerAck);
     };
-  }, [socket, userId, handRaised, scheduleId]);
+  }, [socket, userId, scheduleId, occurrenceId]);
 
   const sendMessage = () => {
     if (!messageText.trim()) return;
-    socket.emit("chatMessage", { scheduleId, text: messageText });
+    socket.emit("chatMessage", { scheduleId, occurrenceId, text: messageText });
     setMessageText("");
   };
 
   const createPoll = () => {
-    if (
-      !pollQuestion.trim() ||
-      pollOptions.filter((opt) => opt.trim()).length < 2
-    ) {
+    if (!pollQuestion.trim() || pollOptions.filter((opt) => opt.trim()).length < 2) {
       alert("Please enter a question and at least 2 options");
       return;
     }
     socket.emit("createPoll", {
       scheduleId,
+      occurrenceId,
       question: pollQuestion,
       options: pollOptions.filter((opt) => opt.trim()),
     });
   };
 
   const votePoll = (pollId, optionIndex) => {
+    // UI already disables when poll.isActive === false; server enforces too
     socket.emit("votePoll", { pollId, optionIndex });
   };
 
   const raiseHand = () => {
-    socket.emit("raiseHand", { scheduleId });
+    socket.emit("raiseHand", { scheduleId, occurrenceId });
   };
 
   const lowerHand = () => {
-    socket.emit("lowerHand", { scheduleId });
+    socket.emit("lowerHand", { scheduleId, occurrenceId });
   };
 
   const addPollOption = () => {
@@ -240,7 +260,7 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input - Improved UI */}
+      {/* Message Input */}
       <div style={{ 
         marginBottom: "10px",
         display: "flex",
@@ -423,7 +443,6 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
               <div key={index} style={{ marginBottom: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
                 <button
                   onClick={() => votePoll(poll.id, index)}
-              
                   style={{ 
                     padding: "2px 6px",
                     fontSize: "10px",
@@ -433,6 +452,7 @@ const ChatComponent = ({ socket, scheduleId, userId, username, role }) => {
                     borderRadius: "3px",
                     cursor: poll.isActive ? "pointer" : "not-allowed"
                   }}
+                  disabled={!poll.isActive}
                 >
                   Vote
                 </button>

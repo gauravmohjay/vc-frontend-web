@@ -4,89 +4,110 @@ import VideoComponent from "./VideoComponent";
 import ChatComponent from "./ChatComponent";
 
 function MeetingApp() {
-  class SocketManager {
-    constructor() {
-      this.socket = null;
-      this.isConnected = false;
-    }
-
-    connect() {
-      this.socket = io("http://localhost:3000/video-calling");
-
-      this.socket.on("connect", () => {
-        this.isConnected = true;
-        console.log("Connected to server");
-      });
-
-      this.socket.on("disconnect", () => {
-        this.isConnected = false;
-        console.log("Disconnected from server");
-      });
-
-      return this.socket;
-    }
-
-    disconnect() {
-      if (this.socket) {
-        this.socket.disconnect();
-      }
-    }
-  }
-
   const [socket, setSocket] = useState(null);
   const [joined, setJoined] = useState(false);
   const [scheduleId, setScheduleId] = useState("");
+  const [occurrenceId, setOccurrenceId] = useState("");
   const [userId, setUserId] = useState("");
   const [username, setUsername] = useState("");
   const [role, setRole] = useState("participant");
 
-  const socketManager = new SocketManager();
-
   useEffect(() => {
-    const newSocket = socketManager.connect();
+    // connect to your custom namespace
+    const newSocket = io("http://localhost:3000/video-calling");
     setSocket(newSocket);
 
-    newSocket.on("livekit-auth", (auth) => {
-      console.log("LiveKit Auth received:", auth);
-      // Here you would initialize LiveKit with the token
+    newSocket.on("connect", () => {
+      console.log("Connected to server");
     });
 
+    newSocket.on("disconnect", () => {
+      console.log("Disconnected from server");
+      setJoined(false);
+    });
+
+    // livekit token received after successful join + auth
+    newSocket.on("livekit-auth", (auth) => {
+      console.log("LiveKit Auth received:", auth);
+      // Initialize LiveKit here when needed
+    });
+
+    // consider join complete when server hydrates chat history
+    newSocket.on("chatHistory", () => {
+      setJoined(true);
+    });
+
+    // server may deny joining (waiting room / not found / closed)
+    newSocket.on("joinDenied", (payload) => {
+      alert(`${payload.reason || "Join denied"}`);
+      setJoined(false);
+    });
+
+    // host closed room
     newSocket.on("roomClosed", (data) => {
       alert(data.message);
       setJoined(false);
     });
 
+    // generic server errors
+    newSocket.on("error", (error) => {
+      alert(`Error: ${error.message}`);
+    });
+
     return () => {
-      socketManager.disconnect();
+      // cleanup listeners and disconnect the socket
+      newSocket.off("connect");
+      newSocket.off("disconnect");
+      newSocket.off("livekit-auth");
+      newSocket.off("chatHistory");
+      newSocket.off("joinDenied");
+      newSocket.off("roomClosed");
+      newSocket.off("error");
+      newSocket.disconnect();
     };
   }, []);
 
   const joinRoom = () => {
-    if (!scheduleId || !userId || !username) {
+    if (!scheduleId  || !userId || !username) {
       alert("Please fill all fields");
       return;
     }
 
     const userData = {
       scheduleId,
+      occurrenceId,
       userId,
       username,
-      role,
-      platformId: "P101",
+      role, // server will compute effective role; this is just for UI
+      platformId: "miskills2",
     };
 
     socket.emit("joinRoom", userData);
-    setJoined(true);
+    // joined state will be set upon receiving "chatHistory"
   };
 
   const leaveRoom = () => {
-    socket.emit("leaveRoom", {platformId:"P101",username, scheduleId, userId,role });
+    socket.emit("leaveRoom", {
+      platformId: "P101",
+      username,
+      scheduleId,
+      userId,
+      role,
+      occurrenceId, // optional for server leave handler; included for consistency
+    });
     setJoined(false);
   };
 
   const endRoom = () => {
     if (role === "host") {
-      socket.emit("endRoom", {platformId:"P101",username, scheduleId, userId,role });
+      socket.emit("endRoom", {
+        platformId: "P101",
+        username,
+        scheduleId,
+        userId,
+        role,
+        occurrenceId, // optional here; server closes by scheduleId
+      });
     }
   };
 
@@ -100,6 +121,15 @@ function MeetingApp() {
             value={scheduleId}
             onChange={(e) => setScheduleId(e.target.value)}
             placeholder="Room ID (scheduleId)"
+            style={{ marginRight: "10px", width: "200px" }}
+          />
+        </div>
+        <div style={{ marginBottom: "10px" }}>
+          <input
+            type="text"
+            value={occurrenceId}
+            onChange={(e) => setOccurrenceId(e.target.value)}
+            placeholder="Occurrence ID"
             style={{ marginRight: "10px", width: "200px" }}
           />
         </div>
@@ -165,6 +195,7 @@ function MeetingApp() {
         <VideoComponent
           socket={socket}
           scheduleId={scheduleId}
+          occurrenceId={occurrenceId}
           userId={userId}
           username={username}
           role={role}
@@ -172,6 +203,7 @@ function MeetingApp() {
         <ChatComponent
           socket={socket}
           scheduleId={scheduleId}
+          occurrenceId={occurrenceId}
           userId={userId}
           username={username}
           role={role}
